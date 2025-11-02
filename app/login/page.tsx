@@ -466,13 +466,16 @@ export default function LoginPage() {
                 {/* Signup Link */}
                 <div className="text-center">
                   <p className="text-sm text-gray-600">
-                    Need an admin account?{' '}
-                    <Link 
-                      href="/signup" 
-                      className="font-medium text-gray-900 hover:text-gray-700 transition-colors"
-                    >
-                      Create one here
-                    </Link>
+                    Want to change the password?{' '}
+                    
+
+                      <button
+        onClick={() => openChangePassword(adminUsers[0])}
+                          className="text-xs bg-blue-200 hover:bg-blue-300 text-blue-700 px-2 py-1 rounded transition-colors"
+                          title="Change password"
+                        >
+                          Change PW
+                      </button>
                   </p>
                 </div>
               </form>
