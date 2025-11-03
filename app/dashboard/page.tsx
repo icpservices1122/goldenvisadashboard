@@ -1,7 +1,8 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { Suspense } from 'react';
+import { Suspense, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
 // Disable SSR for the dashboard content to avoid localStorage issues during build
 const DashboardContent = dynamic(() => import('./dashcontent'), {
@@ -22,6 +23,35 @@ const Logout = dynamic(() => import('../components/LogoutButton'), {
 });
 
 export default function DashboardPage() {
+  const router = useRouter();
+
+  useEffect(() => {
+    // Check if user is logged in
+    const checkAuth = () => {
+      // You can modify this check based on your authentication method
+      // Common approaches:
+      
+      // 1. Check for token in localStorage
+      const token = localStorage.getItem('authToken');
+      // or sessionStorage.getItem('authToken');
+      
+      // 2. Check for user data in localStorage
+      const userData = localStorage.getItem('user');
+      
+      // 3. Check if both token and user data exist
+      if (!token || !userData) {
+        router.push('/login');
+      }
+      
+      // Alternative: if you're using a different auth method, adjust accordingly
+      // if (!isAuthenticated) {
+      //   router.push('/login');
+      // }
+    };
+
+    checkAuth();
+  }, [router]);
+
   return (
     <>
       <Logout />
